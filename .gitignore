@@ -1,0 +1,24 @@
+# Secrets
+.env
+
+# Python
+.venv/
+__pycache__/
+*.egg-info/
+*.pyc
+
+# Data (hosted on HuggingFace)
+data/
+
+# Model weights
+*.pt
+*.safetensors
+*.gguf
+*.bin
+
+# Claude Code
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db

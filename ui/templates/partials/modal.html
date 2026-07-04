@@ -1,0 +1,50 @@
+<div class="modal-overlay" id="annotation-modal" data-page-id="{{ page_id }}">
+    <div class="modal">
+        <div class="modal-header">
+            <div class="modal-title">#{{ page_id }} &mdash; <span title="{{ url }}">{{ url }}</span></div>
+            <div class="modal-actions">
+                <button class="btn btn-cookie{% if has_cookies %} active{% endif %}" id="btn-cookie" onclick="toggleCookie({{ page_id }})">Cookie</button>
+                <button class="btn btn-skip" onclick="skipPage({{ page_id }})">Skip</button>
+                {% if source == 'llm' and not validated %}
+                <button class="btn btn-accept" onclick="acceptPage({{ page_id }})">Accept</button>
+                {% endif %}
+                <button class="btn btn-save" onclick="savePage({{ page_id }}, false)">Save</button>
+                <button class="btn btn-save-next" onclick="savePage({{ page_id }}, true)">Save &amp; Next</button>
+                <button class="btn btn-close" onclick="closeModal()">&times;</button>
+            </div>
+        </div>
+
+        {% if has_html %}
+        <div class="view-bar">
+            <div class="view-toggle">
+                <button class="view-toggle-btn active" onclick="switchView('structure')">Structure</button>
+                <button class="view-toggle-btn" onclick="switchView('structure-light')">Light</button>
+                <button class="view-toggle-btn" onclick="switchView('html')">HTML</button>
+            </div>
+            <button class="btn-set-range" id="btn-set-range" onclick="setRangeFromSelection()">Set Range from Selection</button>
+        </div>
+        {% endif %}
+
+        <div class="status-bar">
+            <span class="status-label">Selected:</span>
+            <span id="range-chips"></span>
+            <button class="btn-clear" onclick="clearRanges()">Clear all</button>
+        </div>
+
+        <div class="line-viewer" id="line-viewer" {% if has_html %}style="display:none"{% endif %}>
+            <pre id="line-viewer-pre">{{ markdown }}</pre>
+        </div>
+
+        {% if has_html %}
+        <div class="html-viewer" id="html-viewer">
+            <iframe id="html-iframe" sandbox="allow-scripts" src="/annotate/{{ page_id }}/html"></iframe>
+        </div>
+        <div class="structure-viewer active" id="structure-viewer" data-src="/annotate/{{ page_id }}/structure"></div>
+        <div class="structure-viewer" id="structure-light-viewer" data-src="/annotate/{{ page_id }}/structure-light"></div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+    initModal({{ ranges|tojson }}, {{ source|tojson }}, {{ validated|tojson }}, {{ has_html|tojson }});
+</script>

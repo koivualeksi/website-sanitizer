@@ -1,0 +1,137 @@
+<div class="tabs">
+    <button class="tab {% if tab == 'unvalidated' %}active{% endif %}"
+            hx-get="/pages?tab=unvalidated&sort={{ sort }}&dir={{ dir }}&search={{ search|urlencode }}"
+            hx-target="#table-area" hx-swap="innerHTML">
+        Unvalidated ({{ counts.unvalidated }})
+    </button>
+    <button class="tab {% if tab == 'validated' %}active{% endif %}"
+            hx-get="/pages?tab=validated&sort={{ sort }}&dir={{ dir }}&search={{ search|urlencode }}"
+            hx-target="#table-area" hx-swap="innerHTML">
+        Validated ({{ counts.validated }})
+    </button>
+    <button class="tab {% if tab == 'all' %}active{% endif %}"
+            hx-get="/pages?tab=all&sort={{ sort }}&dir={{ dir }}&search={{ search|urlencode }}"
+            hx-target="#table-area" hx-swap="innerHTML">
+        All ({{ counts.total }})
+    </button>
+</div>
+
+<div class="search-bar">
+    <input type="text" name="search" placeholder="Search by ID or URL..."
+           value="{{ search }}"
+           hx-get="/pages?tab={{ tab }}&sort={{ sort }}&dir={{ dir }}"
+           hx-target="#table-area" hx-swap="innerHTML"
+           hx-trigger="keyup changed delay:300ms"
+           hx-include="this" />
+</div>
+
+<div class="table-wrapper">
+    <table>
+        <thead>
+            <tr>
+                <th class="col-urgent"></th>
+                {% set new_dir = 'desc' if sort == 'id' and dir == 'asc' else 'asc' %}
+                <th class="col-id resizable"
+                    hx-get="/pages?tab={{ tab }}&sort=id&dir={{ new_dir }}&search={{ search|urlencode }}&page=1"
+                    hx-target="#table-area" hx-swap="innerHTML">
+                    # {% if sort == 'id' %}{{ '▲' if dir == 'asc' else '▼' }}{% endif %}
+                    <span class="resize-handle"></span>
+                </th>
+
+                {% set new_dir = 'desc' if sort == 'url' and dir == 'asc' else 'asc' %}
+                <th class="col-url resizable"
+                    hx-get="/pages?tab={{ tab }}&sort=url&dir={{ new_dir }}&search={{ search|urlencode }}&page=1"
+                    hx-target="#table-area" hx-swap="innerHTML">
+                    URL {% if sort == 'url' %}{{ '▲' if dir == 'asc' else '▼' }}{% endif %}
+                    <span class="resize-handle"></span>
+                </th>
+
+                <th class="col-status">Status</th>
+                <th class="col-annotation">Annotation</th>
+
+                {% set new_dir = 'desc' if sort == 'source' and dir == 'asc' else 'asc' %}
+                <th class="col-source resizable"
+                    hx-get="/pages?tab={{ tab }}&sort=source&dir={{ new_dir }}&search={{ search|urlencode }}&page=1"
+                    hx-target="#table-area" hx-swap="innerHTML">
+                    Source {% if sort == 'source' %}{{ '▲' if dir == 'asc' else '▼' }}{% endif %}
+                    <span class="resize-handle"></span>
+                </th>
+
+                {% set new_dir = 'desc' if sort == 'validated' and dir == 'asc' else 'asc' %}
+                <th class="col-valid resizable"
+                    hx-get="/pages?tab={{ tab }}&sort=validated&dir={{ new_dir }}&search={{ search|urlencode }}&page=1"
+                    hx-target="#table-area" hx-swap="innerHTML">
+                    Valid {% if sort == 'validated' %}{{ '▲' if dir == 'asc' else '▼' }}{% endif %}
+                    <span class="resize-handle"></span>
+                </th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in rows %}
+            <tr class="page-row"
+                hx-get="/annotate/{{ row.id }}"
+                hx-target="#modal-container" hx-swap="innerHTML"
+                hx-trigger="click">
+                <td>{% if row.urgent %}<span class="urgent-flag" title="Urgent">&#9888;</span>{% endif %}</td>
+                <td>{{ row.id }}</td>
+                <td class="cell-url" title="{{ row.url }}">{{ row.url }}</td>
+                <td>
+                    {% if row.skipped %}
+                        <span class="dot dot-grey" title="Skipped"></span>
+                    {% elif row.status == 'success' %}
+                        <span class="dot dot-green" title="Success"></span>
+                    {% else %}
+                        <span class="dot dot-grey" title="{{ row.status or 'Pending' }}"></span>
+                    {% endif %}
+                </td>
+                <td class="cell-annotation">
+                    {% if row.ranges %}
+                        {% for r in row.ranges %}[{{ r.start }}:{{ r.end }}]{% if not loop.last %} {% endif %}{% endfor %}
+                    {% else %}
+                        --
+                    {% endif %}
+                </td>
+                <td>
+                    {% if row.source == 'llm' %}
+                        <span class="badge badge-llm">LLM</span>
+                    {% elif row.source == 'manual' %}
+                        <span class="badge badge-manual">Manual</span>
+                    {% else %}
+                        --
+                    {% endif %}
+                </td>
+                <td>
+                    {% if row.validated %}
+                        <span class="checkmark">&#10003;</span>
+                    {% else %}
+                        --
+                    {% endif %}
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="7" class="empty-row">No pages found.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="pagination">
+    <span class="page-info">Showing {{ rows|length }} of {{ total }}</span>
+    <div class="page-controls">
+        {% if page > 1 %}
+        <button hx-get="/pages?tab={{ tab }}&page={{ page - 1 }}&sort={{ sort }}&dir={{ dir }}&search={{ search|urlencode }}"
+                hx-target="#table-area" hx-swap="innerHTML">Prev</button>
+        {% else %}
+        <button disabled>Prev</button>
+        {% endif %}
+
+        <span>Page {{ page }} of {{ total_pages }}</span>
+
+        {% if page < total_pages %}
+        <button hx-get="/pages?tab={{ tab }}&page={{ page + 1 }}&sort={{ sort }}&dir={{ dir }}&search={{ search|urlencode }}"
+                hx-target="#table-area" hx-swap="innerHTML">Next</button>
+        {% else %}
+        <button disabled>Next</button>
+        {% endif %}
+    </div>
+</div>
