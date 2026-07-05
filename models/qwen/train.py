@@ -460,6 +460,7 @@ def run_grpo(model, tokenizer, raw_train, stacked_masks, advance_map, state_vali
         report_to="none",
         save_strategy="no",
         max_prompt_length=max_prompt_tokens,
+        use_vllm=False,
     )
 
     trainer = GRPOTrainer(
@@ -486,11 +487,11 @@ def run_grpo(model, tokenizer, raw_train, stacked_masks, advance_map, state_vali
     trainer.model.generate = constrained_generate
 
     t0 = time.time()
+    stats = trainer.train()
     try:
-        stats = trainer.train()
         print(f"GRPO time: {stats.metrics['train_runtime']:.0f}s")
     except Exception as e:
-        print(f"GRPO training done (stats error: {e})")
+        print(f"(train stats unavailable: {e})")
 
     # Restore original generate
     model.generate = orig_gen
