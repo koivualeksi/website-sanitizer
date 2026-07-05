@@ -461,6 +461,9 @@ def run_grpo(model, tokenizer, raw_train, stacked_masks, advance_map, state_vali
         save_strategy="no",
         max_prompt_length=max_prompt_tokens,
         use_vllm=False,
+        # default (= grad_accum) generates 16 x 8k-token prompts in one
+        # generate call -> ~11 GiB attention prefill OOM on a 24 GB card
+        steps_per_generation=1,
     )
 
     trainer = GRPOTrainer(
