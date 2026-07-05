@@ -16,7 +16,7 @@ import yaml
 from training.notify import send as notify_slack
 
 RUNPOD_API = "https://rest.runpod.io/v1/pods"
-IMAGE = "runpod/pytorch:2.8.0-py3.11-cuda12.8.1-devel-ubuntu22.04"
+IMAGE = "runpod/pytorch:1.0.7-cu1281-torch280-ubuntu2204"
 
 
 def load_config():
@@ -117,8 +117,7 @@ def main():
         "volumeInGb": 50,
         "containerDiskInGb": 20,
         "env": env_vars,
-        "dockerEntrypoint": ["/bin/bash", "-c"],
-        "dockerStartCmd": ["echo \"$ENTRYPOINT_SCRIPT\" | base64 -d | bash"],
+        "dockerStartCmd": ["/bin/bash", "-c", "echo \"$ENTRYPOINT_SCRIPT\" | base64 -d | /bin/bash"],
     }
 
     print(f"Launching pod: {pod_name}")
