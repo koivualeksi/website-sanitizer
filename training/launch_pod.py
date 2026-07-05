@@ -41,6 +41,7 @@ def main():
     # Smoke test overrides
     if run_type == "smoke":
         cfg["sft_max_steps"] = 5
+        cfg["grpo_max_steps"] = 5
         cfg["max_runtime"] = "30m"
 
     if not api_key:
@@ -94,7 +95,7 @@ def main():
     # Forward optional override keys from config
     optional_keys = [
         "sft_epochs", "sft_lr", "sft_batch", "sft_grad_accum",
-        "grpo_epochs", "grpo_lr", "grpo_num_generations",
+        "grpo_max_steps", "grpo_epochs", "grpo_lr", "grpo_num_generations",
         "grpo_max_completion", "grpo_beta", "grpo_temperature",
         "reward_beta", "lora_r",
     ]

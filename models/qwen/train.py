@@ -49,6 +49,8 @@ def parse_args():
     p.add_argument("--sft-lr", type=float, default=2e-4)
     p.add_argument("--sft-batch", type=int, default=1)
     p.add_argument("--sft-grad-accum", type=int, default=8)
+    p.add_argument("--grpo-max-steps", type=int, default=0,
+                   help="Stop GRPO after N optimizer steps (0 = full run); for smoke tests")
     p.add_argument("--grpo-epochs", type=int, default=1)
     p.add_argument("--grpo-lr", type=float, default=5e-6)
     p.add_argument("--grpo-num-generations", type=int, default=4)
@@ -446,6 +448,7 @@ def run_grpo(model, tokenizer, raw_train, stacked_masks, advance_map, state_vali
         per_device_train_batch_size=1,
         gradient_accumulation_steps=4,
         num_train_epochs=args.grpo_epochs,
+        max_steps=args.grpo_max_steps if args.grpo_max_steps > 0 else -1,
         learning_rate=args.grpo_lr,
         beta=args.grpo_beta,
         temperature=args.grpo_temperature,
@@ -739,7 +742,7 @@ def main():
         print(f"Saved GRPO adapter to {grpo_dir}")
 
         # Eval after GRPO
-        eval_n = 5 if args.sft_max_steps > 0 else 0
+        eval_n = 5 if args.grpo_max_steps > 0 else 0
         print("\n--- GRPO Eval (unconstrained) ---")
         grpo_free = run_eval(model, tokenizer, raw_test, stacked_masks, advance_map,
                              "GRPO (free)", args.max_seq_len, use_constrained=False,
