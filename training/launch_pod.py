@@ -74,7 +74,7 @@ def main():
     # Build env vars for the pod — only config keys that are set
     env_vars = {
         "ENTRYPOINT_SCRIPT": entrypoint_b64,
-        "RUNPOD_API_KEY": api_key,
+        "RUNPOD_TERMINATE_API_KEY": api_key,
         "HF_TOKEN": hf_token,
         "SLACK_WEBHOOK_URL": slack_webhook,
         "GITHUB_SHA": github_sha,
@@ -101,13 +101,6 @@ def main():
     for key in optional_keys:
         if key in cfg:
             env_vars[key.upper()] = str(cfg[key])
-
-    # Parse max_runtime to seconds for the pod's cloud timeout
-    import re
-    m = re.match(r"^(\d+)(h|m|s)$", cfg["max_runtime"].strip())
-    runtime_secs = int(m.group(1)) * {"h": 3600, "m": 60, "s": 1}[m.group(2)]
-    # Add 15 min buffer for setup + upload
-    idle_timeout = runtime_secs + 900
 
     payload = {
         "name": pod_name,
