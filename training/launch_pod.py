@@ -16,7 +16,7 @@ import yaml
 from training.notify import send as notify_slack
 
 RUNPOD_API = "https://rest.runpod.io/v1/pods"
-IMAGE = "runpod/pytorch:0.7.0-cu1263-torch271-ubuntu2204"
+IMAGE = "runpod/pytorch:1.0.7-cu1281-torch280-ubuntu2204"
 
 
 def load_config():
@@ -107,7 +107,7 @@ def main():
         "imageName": IMAGE,
         "gpuTypeIds": [cfg["gpu_type"]],
         "gpuCount": 1,
-        "allowedCudaVersions": ["12.6", "12.8"],
+        "allowedCudaVersions": ["12.8"],
         "volumeInGb": 50,
         "containerDiskInGb": 20,
         "env": env_vars,

@@ -1,7 +1,34 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+exec > >(tee -a /workspace/bootstrap.log) 2>&1
+
+notify_failure() {
+    python3 - "$1" <<'EOF' || true
+import json, os, sys, urllib.request
+try:
+    with open("/workspace/bootstrap.log", "rb") as f:
+        f.seek(0, 2)
+        f.seek(max(0, f.tell() - 2500))
+        tail = f.read().decode(errors="replace")
+except OSError:
+    tail = "(no bootstrap log)"
+msg = (f"Pod {os.environ.get('RUNPOD_POD_ID', '?')} FAILED before finishing "
+       f"(exit {sys.argv[1]}). Last output:\n```{tail}```")
+req = urllib.request.Request(
+    os.environ["SLACK_WEBHOOK_URL"],
+    json.dumps({"text": msg}).encode(),
+    {"Content-Type": "application/json"},
+)
+urllib.request.urlopen(req, timeout=10)
+EOF
+}
+
 cleanup() {
+    status=$?
+    if [ "$status" -ne 0 ] && [ -n "${SLACK_WEBHOOK_URL:-}" ]; then
+        notify_failure "$status"
+    fi
     echo "Terminating pod ${RUNPOD_POD_ID}..."
     for i in 1 2 3; do
         code=$(curl -s -o /tmp/term.txt -w '%{http_code}' -X DELETE \
@@ -27,6 +54,6 @@ git fetch --depth 1 origin "$GITHUB_SHA"
 git checkout FETCH_HEAD
 
 echo "Installing requirements..."
-pip install -r training/requirements.txt 2>&1 | tail -5
+pip install -r training/requirements.txt 2>&1 | tail -20
 
 timeout "$MAX_RUNTIME" python -m training.run
