@@ -506,6 +506,11 @@ def run_grpo(model, tokenizer, raw_train, stacked_masks, advance_map, state_vali
     except Exception as e:
         print(f"(train stats unavailable: {e})")
 
+    # unsloth's GRPO loss sets this process-wide on every step and never
+    # resets it; left at "1" every later forward returns hidden states
+    # instead of logits, breaking all generation (unsloth #1958)
+    os.environ["UNSLOTH_RETURN_HIDDEN_STATES"] = "0"
+
     # Restore original generate
     model.generate = orig_gen
     print(f"GRPO complete in {time.time() - t0:.0f}s")
