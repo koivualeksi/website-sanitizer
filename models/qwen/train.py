@@ -471,6 +471,14 @@ def run_grpo(model, tokenizer, raw_train, stacked_masks, advance_map, state_vali
         train_dataset=grpo_data,
     )
 
+    # unsloth 2025.6.3's compiled _prepare_inputs probes
+    # self.llm.llm_engine.vllm_config.model_config even when use_vllm=False;
+    # stub the chain so the getattr resolves to False instead of AttributeError
+    from types import SimpleNamespace
+    trainer.llm = SimpleNamespace(
+        llm_engine=SimpleNamespace(vllm_config=SimpleNamespace(model_config=SimpleNamespace()))
+    )
+
     # Inject constrained generation
     orig_gen = trainer.model.generate
 
