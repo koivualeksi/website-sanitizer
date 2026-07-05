@@ -539,7 +539,7 @@ def compute_metrics(predicted, truth):
 
 
 def run_eval(model, tokenizer, raw_test, stacked_masks, advance_map, label, max_seq_len,
-             use_constrained=False):
+             use_constrained=False, max_samples=0):
     """Evaluate model on test set. Returns list of per-page results."""
     from unsloth import FastLanguageModel
     FastLanguageModel.for_inference(model)
@@ -547,6 +547,9 @@ def run_eval(model, tokenizer, raw_test, stacked_masks, advance_map, label, max_
     # with transformers >=4.52 GradientCheckpointingLayer then strips use_cache
     # while the model spine still expects it -> IndexError. eval() clears all.
     model.eval()
+
+    if max_samples > 0:
+        raw_test = raw_test[:max_samples]
 
     test_pages = []
     for row in raw_test:
@@ -711,12 +714,15 @@ def main():
         print(f"Saved SFT adapter to {sft_dir}")
 
         # Eval after SFT
+        eval_n = 5 if args.sft_max_steps > 0 else 0
         print("\n--- SFT Eval (unconstrained) ---")
         sft_free = run_eval(model, tokenizer, raw_test, stacked_masks, advance_map,
-                            "SFT (free)", args.max_seq_len, use_constrained=False)
+                            "SFT (free)", args.max_seq_len, use_constrained=False,
+                            max_samples=eval_n)
         print("\n--- SFT Eval (constrained) ---")
         sft_constrained = run_eval(model, tokenizer, raw_test, stacked_masks, advance_map,
-                                   "SFT (constrained)", args.max_seq_len, use_constrained=True)
+                                   "SFT (constrained)", args.max_seq_len, use_constrained=True,
+                                   max_samples=eval_n)
 
     # GRPO phase
     if "grpo" in phases:
@@ -733,12 +739,15 @@ def main():
         print(f"Saved GRPO adapter to {grpo_dir}")
 
         # Eval after GRPO
+        eval_n = 5 if args.sft_max_steps > 0 else 0
         print("\n--- GRPO Eval (unconstrained) ---")
         grpo_free = run_eval(model, tokenizer, raw_test, stacked_masks, advance_map,
-                             "GRPO (free)", args.max_seq_len, use_constrained=False)
+                             "GRPO (free)", args.max_seq_len, use_constrained=False,
+                             max_samples=eval_n)
         print("\n--- GRPO Eval (constrained) ---")
         grpo_constrained = run_eval(model, tokenizer, raw_test, stacked_masks, advance_map,
-                                    "GRPO (constrained)", args.max_seq_len, use_constrained=True)
+                                    "GRPO (constrained)", args.max_seq_len, use_constrained=True,
+                                    max_samples=eval_n)
 
     # Save eval results
     eval_out = {}
