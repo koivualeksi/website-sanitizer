@@ -112,12 +112,13 @@ def main():
     payload = {
         "name": pod_name,
         "imageName": IMAGE,
-        "gpuTypeId": cfg["gpu_type"],
+        "gpuTypeIds": [cfg["gpu_type"]],
         "gpuCount": 1,
         "volumeInGb": 50,
         "containerDiskInGb": 20,
         "env": env_vars,
-        "dockerArgs": f'bash -c \'echo "$ENTRYPOINT_SCRIPT" | base64 -d | bash\'',
+        "dockerEntrypoint": ["/bin/bash", "-c"],
+        "dockerStartCmd": ["echo \"$ENTRYPOINT_SCRIPT\" | base64 -d | bash"],
     }
 
     print(f"Launching pod: {pod_name}")
