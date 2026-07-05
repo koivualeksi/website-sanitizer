@@ -254,6 +254,10 @@ def make_collate_fn(pad_id):
 
 def run_sft(model, tokenizer, train_tokenized, stacked_masks, advance_map, args):
     """Grammar-masked SFT with custom training loop."""
+    from unsloth import FastLanguageModel
+    # for_training/for_inference only flip flags on the model spine, not the
+    # decoder layers — pair them with train()/eval() to keep both in sync.
+    FastLanguageModel.for_training(model)
     pad_id = tokenizer.pad_token_id or tokenizer.eos_token_id
     train_loader = DataLoader(
         TokenizedDataset(train_tokenized),
@@ -431,6 +435,8 @@ def run_grpo(model, tokenizer, raw_train, stacked_masks, advance_map, state_vali
                 rewards.append(fbeta)
         return rewards
 
+    from unsloth import FastLanguageModel
+    FastLanguageModel.for_training(model)
     model.train()
 
     grpo_config = GRPOConfig(
@@ -537,6 +543,10 @@ def run_eval(model, tokenizer, raw_test, stacked_masks, advance_map, label, max_
     """Evaluate model on test set. Returns list of per-page results."""
     from unsloth import FastLanguageModel
     FastLanguageModel.for_inference(model)
+    # for_inference leaves decoder layers with training=True after model.train();
+    # with transformers >=4.52 GradientCheckpointingLayer then strips use_cache
+    # while the model spine still expects it -> IndexError. eval() clears all.
+    model.eval()
 
     test_pages = []
     for row in raw_test:
