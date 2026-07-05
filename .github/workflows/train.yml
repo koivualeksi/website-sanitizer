@@ -1,0 +1,41 @@
+name: train
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_type:
+        description: "Run type"
+        type: choice
+        options:
+          - smoke
+          - full
+        default: smoke
+
+concurrency:
+  group: training-launch
+  cancel-in-progress: false
+
+jobs:
+  launch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: pip install pyyaml requests slack_sdk
+
+      - name: Validate config
+        run: python training/validate_config.py training/config.yaml
+
+      - name: Launch training pod
+        run: python training/launch_pod.py
+        env:
+          RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          HF_MODEL_REPO: ${{ secrets.HF_MODEL_REPO }}
+          HF_DATASET: ${{ secrets.HF_DATASET }}
+          RUN_TYPE: ${{ inputs.run_type }}
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
