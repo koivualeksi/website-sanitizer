@@ -18,9 +18,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8,<10"]
+training = ["slack_sdk>=3.27", "huggingface_hub>=0.32"]
 
 [tool.setuptools.packages.find]
-include = ["db*", "scraper*", "scripts*", "ui*", "llm*"]
-
-[project.scripts]
-seed = "scripts.seed:main"
+include = ["db*", "scraper*", "tools*", "ui*", "training*"]
