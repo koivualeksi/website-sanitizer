@@ -125,9 +125,8 @@ def main():
         download_dataset(hf_dataset, hf_dataset_revision, hf_token)
         train_args = build_train_args(env)
         exit_code = run_training(train_args, LOG_PATH)
-
-        if exit_code == 0:
-            upload_results(hf_model_repo, hf_token, run_name, sha)
+        # Upload even on failure — the log is the only record of what went wrong
+        upload_results(hf_model_repo, hf_token, run_name, sha)
     except Exception:
         try:
             upload_results(hf_model_repo, hf_token, run_name, sha)
