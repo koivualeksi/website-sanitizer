@@ -91,6 +91,9 @@ def main():
         "HF_DATASET_REVISION": cfg.get("hf_dataset_revision", "main"),
         "GPU_TYPE": cfg["gpu_type"],
     }
+    if run_type == "smoke":
+        # synchronous CUDA so device-side asserts point at the real faulting op
+        env_vars["CUDA_LAUNCH_BLOCKING"] = "1"
 
     # Forward optional override keys from config
     optional_keys = [

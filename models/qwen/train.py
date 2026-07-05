@@ -486,13 +486,15 @@ def run_grpo(model, tokenizer, raw_train, stacked_masks, advance_map, state_vali
     orig_gen = trainer.model.generate
 
     def constrained_generate(*a, **kw):
-        if kw.get("temperature", 0) > 0 or kw.get("do_sample", False):
-            proc = GrammarLogitsProcessor(stacked_masks, advance_map)
-            existing = kw.get("logits_processor", None)
-            if existing is None:
-                kw["logits_processor"] = [proc]
-            else:
-                existing.append(proc)
+        # TRL passes sampling params inside generation_config, not as kwargs,
+        # so gate on nothing: every generate call in the GRPO phase is a
+        # completion rollout and must be grammar-masked
+        proc = GrammarLogitsProcessor(stacked_masks, advance_map)
+        existing = kw.get("logits_processor", None)
+        if existing is None:
+            kw["logits_processor"] = [proc]
+        else:
+            existing.append(proc)
         return orig_gen(*a, **kw)
 
     trainer.model.generate = constrained_generate
