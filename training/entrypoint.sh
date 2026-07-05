@@ -8,6 +8,7 @@ cleanup() {
 trap cleanup EXIT
 
 echo "Cloning repo at ${GITHUB_SHA}..."
+rm -rf /workspace/repo
 git init /workspace/repo
 cd /workspace/repo
 git remote add origin "$REPO_URL"
