@@ -149,7 +149,7 @@ def main():
         sys.exit(1)
 
     pod_id = result.get("id", "unknown")
-    console_url = f"https://www.runpod.io/console/pods/{pod_id}"
+    console_url = f"https://console.runpod.io/pods?id={pod_id}"
 
     print(f"Pod launched: {pod_id}")
     print(f"Console: {console_url}")
