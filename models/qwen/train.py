@@ -755,6 +755,20 @@ def main():
         tokenizer.save_pretrained(grpo_dir)
         print(f"Saved GRPO adapter to {grpo_dir}")
 
+        # unsloth's GRPO leaves the in-memory model emitting hidden states
+        # instead of logits (unsloth #1958), so generation after training is
+        # broken; reload the saved adapter and eval that instead
+        import gc
+        del model
+        gc.collect()
+        torch.cuda.empty_cache()
+        model, tokenizer = FastLanguageModel.from_pretrained(
+            model_name=grpo_dir,
+            max_seq_length=args.max_seq_len,
+            dtype=None,
+            load_in_4bit=True,
+        )
+
         # Eval after GRPO
         eval_n = 5 if args.grpo_max_steps > 0 else 0
         print("\n--- GRPO Eval (unconstrained) ---")
