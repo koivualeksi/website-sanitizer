@@ -31,6 +31,7 @@ jobs:
       - name: Launch training pod
         run: python training/launch_pod.py
         env:
+          PYTHONPATH: ${{ github.workspace }}
           RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
