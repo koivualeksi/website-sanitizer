@@ -16,7 +16,7 @@ import yaml
 from training.notify import send as notify_slack
 
 RUNPOD_API = "https://rest.runpod.io/v1/pods"
-IMAGE = "runpod/pytorch:1.0.7-cu1281-torch280-ubuntu2204"
+IMAGE = "runpod/pytorch:0.7.0-cu1263-torch271-ubuntu2204"
 
 
 def load_config():
