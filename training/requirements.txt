@@ -1,6 +1,9 @@
-# Pinned for runpod/pytorch:2.8.0-py3.11-cuda12.8.1-devel-ubuntu22.04
+# Baked into training/Dockerfile by .github/workflows/build-image.yml.
 # TRL API drift has broken GRPO before — pin exact versions.
-unsloth[cu128-torch280]==2025.6.3
+# NOTE: the extra must exist for this unsloth version or pip silently
+# ignores it (cu128-torch280 did not exist — extras top out at torch270).
+# Resolves to torch 2.7.0+cu126 via the xformers==0.0.30 pin.
+unsloth[cu126-torch270]==2025.6.3
 unsloth_zoo==2025.6.2
 # transformers >=4.52 GradientCheckpointingLayer breaks unsloth's for_inference()
 # (layers keep stale training flags -> IndexError in LlamaModel_fast_forward)

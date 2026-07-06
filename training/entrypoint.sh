@@ -53,7 +53,11 @@ git remote add origin "$REPO_URL"
 git fetch --depth 1 origin "$GITHUB_SHA"
 git checkout FETCH_HEAD
 
-echo "Installing requirements..."
-pip install -r training/requirements.txt 2>&1 | tail -20
+# Dependencies are baked into the image (training/Dockerfile); fail fast if
+# the pod was launched with a stale/wrong image instead of reinstalling
+python -c "import unsloth, trl, slack_sdk" || {
+    echo "ERROR: baked dependencies missing — was the pod launched with the GHCR image?"
+    exit 1
+}
 
 timeout "$MAX_RUNTIME" python -m training.run
