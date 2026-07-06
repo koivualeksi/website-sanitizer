@@ -1,6 +1,10 @@
 # Pinned for runpod/pytorch:2.8.0-py3.11-cuda12.8.1-devel-ubuntu22.04
 # TRL API drift has broken GRPO before — pin exact versions.
 unsloth[cu128-torch280]==2025.6.3
+unsloth_zoo==2025.6.2
+# transformers >=4.52 GradientCheckpointingLayer breaks unsloth's for_inference()
+# (layers keep stale training flags -> IndexError in eval generation)
+transformers==4.51.3
 trl==0.18.1
 datasets==3.6.0
 huggingface_hub==0.32.4
