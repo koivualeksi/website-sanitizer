@@ -195,9 +195,10 @@ class GrammarLogitsProcessor:
     argmax) and under batched generation (each row has its own state).
     """
 
-    def __init__(self, stacked_masks, advance_map):
+    def __init__(self, stacked_masks, advance_map, eos_id):
         self.stacked_masks = stacked_masks
         self.advance_map = advance_map
+        self.eos_id = eos_id
         self.prompt_len = None
 
     def _state_for(self, generated):
@@ -212,6 +213,12 @@ class GrammarLogitsProcessor:
         if self.prompt_len is None:
             self.prompt_len = input_ids.shape[1]
         vocab_size = scores.shape[-1]
+        # scores smaller than the vocab means we got hidden states, not logits
+        # (UNSLOTH_RETURN_HIDDEN_STATES left at "1") — EOS would be unsamplable
+        assert vocab_size > self.eos_id, (
+            f"scores dim {vocab_size} cannot contain EOS {self.eos_id}; "
+            "generate() returned hidden states instead of logits"
+        )
         batched = scores.dim() == 2
         for b in range(input_ids.shape[0]):
             state = self._state_for(input_ids[b, self.prompt_len:].tolist())
@@ -486,10 +493,16 @@ def run_grpo(model, tokenizer, raw_train, stacked_masks, advance_map, state_vali
     orig_gen = trainer.model.generate
 
     def constrained_generate(*a, **kw):
+        # unsloth's GRPO loss sets UNSLOTH_RETURN_HIDDEN_STATES=1 on every step
+        # and never clears it; left at "1" the next generate() returns hidden
+        # states instead of logits, making EOS unreachable and every rollout
+        # a truncated zero-reward sequence (unsloth #1958). Safe to force off
+        # here: unsloth re-sets it inside each loss computation.
+        os.environ["UNSLOTH_RETURN_HIDDEN_STATES"] = "0"
         # TRL passes sampling params inside generation_config, not as kwargs,
         # so gate on nothing: every generate call in the GRPO phase is a
         # completion rollout and must be grammar-masked
-        proc = GrammarLogitsProcessor(stacked_masks, advance_map)
+        proc = GrammarLogitsProcessor(stacked_masks, advance_map, tokenizer.eos_token_id)
         existing = kw.get("logits_processor", None)
         if existing is None:
             kw["logits_processor"] = [proc]
@@ -610,7 +623,7 @@ def run_eval(model, tokenizer, raw_test, stacked_masks, advance_map, label, max_
         gen_kwargs = dict(**inputs, max_new_tokens=128, temperature=0.0, do_sample=False)
         if use_constrained:
             gen_kwargs["logits_processor"] = [
-                GrammarLogitsProcessor(stacked_masks, advance_map)
+                GrammarLogitsProcessor(stacked_masks, advance_map, tokenizer.eos_token_id)
             ]
         output = model.generate(**gen_kwargs)
         response = tokenizer.decode(output[0][inputs["input_ids"].shape[1]:],
