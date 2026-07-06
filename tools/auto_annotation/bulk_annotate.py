@@ -24,18 +24,16 @@ from dotenv import load_dotenv
 from psycopg.rows import dict_row
 
 from db.pool import create_pool
+from tools.auto_annotation.config import (
+    OPENROUTER_URL,
+    REQUEST_TIMEOUT,
+    CALL_DELAY,
+    MAX_RESPONSE_LEN,
+    MAX_RANGES,
+    MODELS_BULK as MODELS,
+)
 from tools.auto_annotation.prompt import SYSTEM_PROMPT, USER_PROMPT_TEMPLATE
 from scraper.converter import html_to_markdown_light
-
-MODEL_A = "google/gemini-2.5-flash"
-MODEL_B = "deepseek/deepseek-v4-flash"
-MODEL_C = "openai/gpt-4o-mini"
-MODELS = [MODEL_A, MODEL_B, MODEL_C]
-OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
-REQUEST_TIMEOUT = httpx.Timeout(10.0, read=120.0)
-CALL_DELAY = 1.0
-MAX_RESPONSE_LEN = 50_000
-MAX_RANGES = 500
 
 
 def _fetch_unannotated(pool, limit, urgent_only=False):

@@ -4,16 +4,15 @@ import re
 
 import httpx
 
+from tools.auto_annotation.config import (
+    OPENROUTER_URL,
+    REQUEST_TIMEOUT,
+    CALL_DELAY,
+    MAX_RESPONSE_LEN,
+    MAX_RANGES,
+    MODEL_DEFAULT,
+)
 from tools.auto_annotation.prompt import SYSTEM_PROMPT, USER_PROMPT_TEMPLATE
-
-_OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
-_DEFAULT_MODEL = "google/gemini-2.5-flash"
-_REQUEST_TIMEOUT = httpx.Timeout(10.0, read=120.0)
-_MAX_RESPONSE_LEN = 50_000
-_MAX_RANGES = 500
-
-# Delay between API calls to avoid rate limiting
-CALL_DELAY = 2.0
 
 
 def _get_max_line(structured_markdown: str) -> int:
@@ -39,7 +38,7 @@ def _validate_ranges(raw: list, max_line: int) -> list[dict]:
     """Validate and clean parsed ranges."""
     if not isinstance(raw, list):
         raise ValueError("Response is not a JSON array")
-    if len(raw) > _MAX_RANGES:
+    if len(raw) > MAX_RANGES:
         raise ValueError(f"Too many ranges ({len(raw)})")
 
     ranges = []
@@ -76,7 +75,7 @@ def annotate_page(structured_markdown: str) -> list[dict] | None:
     if not api_key:
         raise ValueError("OPENROUTER_API_KEY is not set")
 
-    model = os.environ.get("OPENROUTER_MODEL", _DEFAULT_MODEL).strip()
+    model = os.environ.get("OPENROUTER_MODEL", MODEL_DEFAULT).strip()
     max_line = _get_max_line(structured_markdown)
     if max_line == 0:
         return []
@@ -97,10 +96,10 @@ def annotate_page(structured_markdown: str) -> list[dict] | None:
 
     try:
         response = httpx.post(
-            _OPENROUTER_URL,
+            OPENROUTER_URL,
             json=payload,
             headers=headers,
-            timeout=_REQUEST_TIMEOUT,
+            timeout=REQUEST_TIMEOUT,
         )
         response.raise_for_status()
     except httpx.HTTPStatusError as e:
@@ -125,7 +124,7 @@ def annotate_page(structured_markdown: str) -> list[dict] | None:
         print("  [ERROR] Empty content in response")
         return None
 
-    if len(content) > _MAX_RESPONSE_LEN:
+    if len(content) > MAX_RESPONSE_LEN:
         print("  [ERROR] Response too large")
         return None
 
