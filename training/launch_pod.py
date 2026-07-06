@@ -16,7 +16,18 @@ import yaml
 from training.notify import send as notify_slack
 
 RUNPOD_API = "https://rest.runpod.io/v1/pods"
-IMAGE = "runpod/pytorch:2.8.0-py3.11-cuda12.8.1-devel-ubuntu22.04"
+
+
+def image_name():
+    """GHCR image baked by build-image.yml; TRAIN_IMAGE overrides for testing."""
+    override = os.environ.get("TRAIN_IMAGE")
+    if override:
+        return override
+    gh_repo = os.environ.get("GITHUB_REPOSITORY", "")
+    if not gh_repo:
+        print("GITHUB_REPOSITORY or TRAIN_IMAGE must be set to resolve the image")
+        sys.exit(1)
+    return f"ghcr.io/{gh_repo.lower()}/train:latest"
 
 
 def load_config():
@@ -41,6 +52,7 @@ def main():
     # Smoke test overrides
     if run_type == "smoke":
         cfg["sft_max_steps"] = 5
+        cfg["grpo_max_steps"] = 5
         cfg["max_runtime"] = "30m"
 
     if not api_key:
@@ -74,7 +86,7 @@ def main():
     # Build env vars for the pod — only config keys that are set
     env_vars = {
         "ENTRYPOINT_SCRIPT": entrypoint_b64,
-        "RUNPOD_API_KEY": api_key,
+        "RUNPOD_TERMINATE_API_KEY": api_key,
         "HF_TOKEN": hf_token,
         "SLACK_WEBHOOK_URL": slack_webhook,
         "GITHUB_SHA": github_sha,
@@ -90,11 +102,14 @@ def main():
         "HF_DATASET_REVISION": cfg.get("hf_dataset_revision", "main"),
         "GPU_TYPE": cfg["gpu_type"],
     }
+    if run_type == "smoke":
+        # synchronous CUDA so device-side asserts point at the real faulting op
+        env_vars["CUDA_LAUNCH_BLOCKING"] = "1"
 
     # Forward optional override keys from config
     optional_keys = [
         "sft_epochs", "sft_lr", "sft_batch", "sft_grad_accum",
-        "grpo_epochs", "grpo_lr", "grpo_num_generations",
+        "grpo_max_steps", "grpo_epochs", "grpo_lr", "grpo_num_generations",
         "grpo_max_completion", "grpo_beta", "grpo_temperature",
         "reward_beta", "lora_r",
     ]
@@ -102,28 +117,23 @@ def main():
         if key in cfg:
             env_vars[key.upper()] = str(cfg[key])
 
-    # Parse max_runtime to seconds for the pod's cloud timeout
-    import re
-    m = re.match(r"^(\d+)(h|m|s)$", cfg["max_runtime"].strip())
-    runtime_secs = int(m.group(1)) * {"h": 3600, "m": 60, "s": 1}[m.group(2)]
-    # Add 15 min buffer for setup + upload
-    idle_timeout = runtime_secs + 900
-
+    image = image_name()
     payload = {
         "name": pod_name,
-        "imageName": IMAGE,
-        "gpuTypeId": cfg["gpu_type"],
+        "imageName": image,
+        "gpuTypeIds": [cfg["gpu_type"]],
         "gpuCount": 1,
+        "allowedCudaVersions": ["12.8"],
         "volumeInGb": 50,
         "containerDiskInGb": 20,
         "env": env_vars,
-        "dockerArgs": f'bash -c \'echo "$ENTRYPOINT_SCRIPT" | base64 -d | bash\'',
+        "dockerStartCmd": ["/bin/bash", "-c", "echo \"$ENTRYPOINT_SCRIPT\" | base64 -d | /bin/bash"],
     }
 
     print(f"Launching pod: {pod_name}")
     print(f"  GPU: {cfg['gpu_type']}")
     print(f"  Model: {cfg['model']}, Phases: {cfg['phases']}")
-    print(f"  Image: {IMAGE}")
+    print(f"  Image: {image}")
 
     try:
         resp = requests.post(
@@ -149,7 +159,7 @@ def main():
         sys.exit(1)
 
     pod_id = result.get("id", "unknown")
-    console_url = f"https://www.runpod.io/console/pods/{pod_id}"
+    console_url = f"https://console.runpod.io/pods?id={pod_id}"
 
     print(f"Pod launched: {pod_id}")
     print(f"Console: {console_url}")

@@ -49,6 +49,8 @@ def parse_args():
     p.add_argument("--sft-lr", type=float, default=2e-4)
     p.add_argument("--sft-batch", type=int, default=1)
     p.add_argument("--sft-grad-accum", type=int, default=8)
+    p.add_argument("--grpo-max-steps", type=int, default=0,
+                   help="Stop GRPO after N optimizer steps (0 = full run); for smoke tests")
     p.add_argument("--grpo-epochs", type=int, default=1)
     p.add_argument("--grpo-lr", type=float, default=5e-6)
     p.add_argument("--grpo-num-generations", type=int, default=4)
@@ -193,9 +195,10 @@ class GrammarLogitsProcessor:
     argmax) and under batched generation (each row has its own state).
     """
 
-    def __init__(self, stacked_masks, advance_map):
+    def __init__(self, stacked_masks, advance_map, eos_id):
         self.stacked_masks = stacked_masks
         self.advance_map = advance_map
+        self.eos_id = eos_id
         self.prompt_len = None
 
     def _state_for(self, generated):
@@ -210,6 +213,12 @@ class GrammarLogitsProcessor:
         if self.prompt_len is None:
             self.prompt_len = input_ids.shape[1]
         vocab_size = scores.shape[-1]
+        # scores smaller than the vocab means we got hidden states, not logits
+        # (UNSLOTH_RETURN_HIDDEN_STATES left at "1") — EOS would be unsamplable
+        assert vocab_size > self.eos_id, (
+            f"scores dim {vocab_size} cannot contain EOS {self.eos_id}; "
+            "generate() returned hidden states instead of logits"
+        )
         batched = scores.dim() == 2
         for b in range(input_ids.shape[0]):
             state = self._state_for(input_ids[b, self.prompt_len:].tolist())
@@ -254,6 +263,10 @@ def make_collate_fn(pad_id):
 
 def run_sft(model, tokenizer, train_tokenized, stacked_masks, advance_map, args):
     """Grammar-masked SFT with custom training loop."""
+    from unsloth import FastLanguageModel
+    # for_training/for_inference only flip flags on the model spine, not the
+    # decoder layers — pair them with train()/eval() to keep both in sync.
+    FastLanguageModel.for_training(model)
     pad_id = tokenizer.pad_token_id or tokenizer.eos_token_id
     train_loader = DataLoader(
         TokenizedDataset(train_tokenized),
@@ -277,6 +290,8 @@ def run_sft(model, tokenizer, train_tokenized, stacked_masks, advance_map, args)
     global_step = 0
     accum_loss = 0.0
     t0 = time.time()
+    history = []
+    history_path = os.path.join(args.output_dir, "sft_log_history.json")
 
     for epoch in range(args.sft_epochs):
         for batch_idx, batch in enumerate(train_loader):
@@ -328,6 +343,10 @@ def run_sft(model, tokenizer, train_tokenized, stacked_masks, advance_map, args)
                     lr = scheduler.get_last_lr()[0]
                     print(f"  step {global_step}/{total_steps}  loss={avg:.4f}  lr={lr:.2e}")
                     accum_loss = 0.0
+                    # Rewritten every log step so the curve survives a crash
+                    history.append({"step": global_step, "loss": avg, "lr": lr})
+                    with open(history_path, "w") as f:
+                        json.dump(history, f)
 
                 if args.sft_max_steps > 0 and global_step >= args.sft_max_steps:
                     print(f"  Reached --sft-max-steps {args.sft_max_steps}, stopping.")
@@ -431,6 +450,8 @@ def run_grpo(model, tokenizer, raw_train, stacked_masks, advance_map, state_vali
                 rewards.append(fbeta)
         return rewards
 
+    from unsloth import FastLanguageModel
+    FastLanguageModel.for_training(model)
     model.train()
 
     grpo_config = GRPOConfig(
@@ -440,6 +461,7 @@ def run_grpo(model, tokenizer, raw_train, stacked_masks, advance_map, state_vali
         per_device_train_batch_size=1,
         gradient_accumulation_steps=4,
         num_train_epochs=args.grpo_epochs,
+        max_steps=args.grpo_max_steps if args.grpo_max_steps > 0 else -1,
         learning_rate=args.grpo_lr,
         beta=args.grpo_beta,
         temperature=args.grpo_temperature,
@@ -451,6 +473,10 @@ def run_grpo(model, tokenizer, raw_train, stacked_masks, advance_map, state_vali
         report_to="none",
         save_strategy="no",
         max_prompt_length=max_prompt_tokens,
+        use_vllm=False,
+        # default (= grad_accum) generates 16 x 8k-token prompts in one
+        # generate call -> ~11 GiB attention prefill OOM on a 24 GB card
+        steps_per_generation=1,
     )
 
     trainer = GRPOTrainer(
@@ -461,27 +487,53 @@ def run_grpo(model, tokenizer, raw_train, stacked_masks, advance_map, state_vali
         train_dataset=grpo_data,
     )
 
+    # unsloth 2025.6.3's compiled _prepare_inputs probes
+    # self.llm.llm_engine.vllm_config.model_config even when use_vllm=False;
+    # stub the chain so the getattr resolves to False instead of AttributeError
+    from types import SimpleNamespace
+    trainer.llm = SimpleNamespace(
+        llm_engine=SimpleNamespace(vllm_config=SimpleNamespace(model_config=SimpleNamespace()))
+    )
+
     # Inject constrained generation
     orig_gen = trainer.model.generate
 
     def constrained_generate(*a, **kw):
-        if kw.get("temperature", 0) > 0 or kw.get("do_sample", False):
-            proc = GrammarLogitsProcessor(stacked_masks, advance_map)
-            existing = kw.get("logits_processor", None)
-            if existing is None:
-                kw["logits_processor"] = [proc]
-            else:
-                existing.append(proc)
+        # unsloth's GRPO loss sets UNSLOTH_RETURN_HIDDEN_STATES=1 on every step
+        # and never clears it; left at "1" the next generate() returns hidden
+        # states instead of logits, making EOS unreachable and every rollout
+        # a truncated zero-reward sequence (unsloth #1958). Safe to force off
+        # here: unsloth re-sets it inside each loss computation.
+        os.environ["UNSLOTH_RETURN_HIDDEN_STATES"] = "0"
+        # TRL passes sampling params inside generation_config, not as kwargs,
+        # so gate on nothing: every generate call in the GRPO phase is a
+        # completion rollout and must be grammar-masked
+        proc = GrammarLogitsProcessor(stacked_masks, advance_map, tokenizer.eos_token_id)
+        existing = kw.get("logits_processor", None)
+        if existing is None:
+            kw["logits_processor"] = [proc]
+        else:
+            existing.append(proc)
         return orig_gen(*a, **kw)
 
     trainer.model.generate = constrained_generate
 
     t0 = time.time()
+    stats = trainer.train()
     try:
-        stats = trainer.train()
         print(f"GRPO time: {stats.metrics['train_runtime']:.0f}s")
     except Exception as e:
-        print(f"GRPO training done (stats error: {e})")
+        print(f"(train stats unavailable: {e})")
+
+    # Full metric curves (reward, clipped_ratio, kl, ...) for offline review;
+    # uploaded to HF with the rest of output_dir
+    with open(os.path.join(args.output_dir, "grpo_log_history.json"), "w") as f:
+        json.dump(trainer.state.log_history, f)
+
+    # unsloth's GRPO loss sets this process-wide on every step and never
+    # resets it; left at "1" every later forward returns hidden states
+    # instead of logits, breaking all generation (unsloth #1958)
+    os.environ["UNSLOTH_RETURN_HIDDEN_STATES"] = "0"
 
     # Restore original generate
     model.generate = orig_gen
@@ -533,10 +585,17 @@ def compute_metrics(predicted, truth):
 
 
 def run_eval(model, tokenizer, raw_test, stacked_masks, advance_map, label, max_seq_len,
-             use_constrained=False):
+             use_constrained=False, max_samples=0):
     """Evaluate model on test set. Returns list of per-page results."""
     from unsloth import FastLanguageModel
     FastLanguageModel.for_inference(model)
+    # for_inference leaves decoder layers with training=True after model.train();
+    # with transformers >=4.52 GradientCheckpointingLayer then strips use_cache
+    # while the model spine still expects it -> IndexError. eval() clears all.
+    model.eval()
+
+    if max_samples > 0:
+        raw_test = raw_test[:max_samples]
 
     test_pages = []
     for row in raw_test:
@@ -555,6 +614,7 @@ def run_eval(model, tokenizer, raw_test, stacked_masks, advance_map, label, max_
         })
 
     results = []
+    n_shown = 0
     for i, page in enumerate(test_pages):
         md = page["markdown"]
         max_line = get_max_line(md)
@@ -575,30 +635,34 @@ def run_eval(model, tokenizer, raw_test, stacked_masks, advance_map, label, max_
         gen_kwargs = dict(**inputs, max_new_tokens=128, temperature=0.0, do_sample=False)
         if use_constrained:
             gen_kwargs["logits_processor"] = [
-                GrammarLogitsProcessor(stacked_masks, advance_map)
+                GrammarLogitsProcessor(stacked_masks, advance_map, tokenizer.eos_token_id)
             ]
         output = model.generate(**gen_kwargs)
         response = tokenizer.decode(output[0][inputs["input_ids"].shape[1]:],
                                     skip_special_tokens=True)
 
         pred_lines = parse_ranges(response, max_line)
-        if pred_lines is None:
-            results.append(None)
-            if i < 20:
-                print(f"  [{i+1}/{len(test_pages)}] pid={page['page_id']} "
-                      f"PARSE_ERROR: {response[:80]}")
-        else:
-            metrics = compute_metrics(pred_lines, truth_lines)
-            results.append(metrics)
+        metrics = compute_metrics(pred_lines, truth_lines) if pred_lines is not None else None
+        # Full response is kept so failures can be analyzed offline from the
+        # uploaded eval json — the console only shows a few examples
+        results.append({
+            "page_id": page["page_id"],
+            "response": response,
+            "metrics": metrics,
+        })
+        if metrics is None and n_shown < 10:
+            n_shown += 1
+            print(f"  [{i+1}/{len(test_pages)}] pid={page['page_id']} "
+                  f"PARSE_ERROR: {response[:80]}")
 
         if (i + 1) % 100 == 0:
-            ok_so_far = [r for r in results if r is not None]
+            ok_so_far = [r["metrics"] for r in results if r["metrics"] is not None]
             if ok_so_far:
                 iou = sum(r["iou"] for r in ok_so_far) / len(ok_so_far)
                 print(f"  [{i+1}/{len(test_pages)}] running IoU={iou:.3f}")
 
-    ok = [r for r in results if r is not None]
-    n_fail = sum(1 for r in results if r is None)
+    ok = [r["metrics"] for r in results if r["metrics"] is not None]
+    n_fail = sum(1 for r in results if r["metrics"] is None)
     print(f"\n{label} — {len(ok)}/{len(results)} succeeded ({n_fail} parse failures)")
     if ok:
         mi = sum(r["iou"] for r in ok) / len(ok)
@@ -708,12 +772,15 @@ def main():
         print(f"Saved SFT adapter to {sft_dir}")
 
         # Eval after SFT
+        eval_n = 5 if args.sft_max_steps > 0 else 0
         print("\n--- SFT Eval (unconstrained) ---")
         sft_free = run_eval(model, tokenizer, raw_test, stacked_masks, advance_map,
-                            "SFT (free)", args.max_seq_len, use_constrained=False)
+                            "SFT (free)", args.max_seq_len, use_constrained=False,
+                            max_samples=eval_n)
         print("\n--- SFT Eval (constrained) ---")
         sft_constrained = run_eval(model, tokenizer, raw_test, stacked_masks, advance_map,
-                                   "SFT (constrained)", args.max_seq_len, use_constrained=True)
+                                   "SFT (constrained)", args.max_seq_len, use_constrained=True,
+                                   max_samples=eval_n)
 
     # GRPO phase
     if "grpo" in phases:
@@ -729,13 +796,30 @@ def main():
         tokenizer.save_pretrained(grpo_dir)
         print(f"Saved GRPO adapter to {grpo_dir}")
 
+        # unsloth's GRPO leaves the in-memory model emitting hidden states
+        # instead of logits (unsloth #1958), so generation after training is
+        # broken; reload the saved adapter and eval that instead
+        import gc
+        del model
+        gc.collect()
+        torch.cuda.empty_cache()
+        model, tokenizer = FastLanguageModel.from_pretrained(
+            model_name=grpo_dir,
+            max_seq_length=args.max_seq_len,
+            dtype=None,
+            load_in_4bit=True,
+        )
+
         # Eval after GRPO
+        eval_n = 5 if args.grpo_max_steps > 0 else 0
         print("\n--- GRPO Eval (unconstrained) ---")
         grpo_free = run_eval(model, tokenizer, raw_test, stacked_masks, advance_map,
-                             "GRPO (free)", args.max_seq_len, use_constrained=False)
+                             "GRPO (free)", args.max_seq_len, use_constrained=False,
+                             max_samples=eval_n)
         print("\n--- GRPO Eval (constrained) ---")
         grpo_constrained = run_eval(model, tokenizer, raw_test, stacked_masks, advance_map,
-                                    "GRPO (constrained)", args.max_seq_len, use_constrained=True)
+                                    "GRPO (constrained)", args.max_seq_len, use_constrained=True,
+                                    max_samples=eval_n)
 
     # Save eval results
     eval_out = {}
