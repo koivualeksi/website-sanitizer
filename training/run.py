@@ -17,7 +17,7 @@ DATA_DIR = Path("/workspace/data")
 
 def download_dataset(hf_dataset, hf_dataset_revision, hf_token):
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    for filename in ("train.jsonl", "test.jsonl"):
+    for filename in ("train_sft.jsonl", "train_grpo.jsonl", "test.jsonl"):
         path = hf_hub_download(
             repo_id=hf_dataset,
             filename=filename,

@@ -39,7 +39,7 @@ def parse_args():
     p.add_argument("--phases", default="sft,grpo",
                    help="Comma-separated phases to run: sft, grpo (default: sft,grpo)")
     p.add_argument("--data-dir", default=os.path.join(os.path.dirname(__file__), "..", "..", "data"),
-                   help="Directory containing train.jsonl and test.jsonl")
+                   help="Directory containing train_sft.jsonl, train_grpo.jsonl, and test.jsonl")
     p.add_argument("--output-dir", default=os.path.join(os.path.dirname(__file__), "..", "..", "output"),
                    help="Directory for adapter outputs")
     p.add_argument("--max-seq-len", type=int, default=4096)
@@ -630,15 +630,22 @@ def main():
     print(f"Output dir:  {output_dir}")
     print("=" * 70)
 
-    # Load data
-    train_path = os.path.join(data_dir, "train.jsonl")
+    # Load data — SFT and GRPO train on different files (silver vs gold+diamond)
     test_path = os.path.join(data_dir, "test.jsonl")
-    assert os.path.exists(train_path), f"train.jsonl not found in {data_dir}"
     assert os.path.exists(test_path), f"test.jsonl not found in {data_dir}"
-
-    raw_train = load_jsonl(train_path)
     raw_test = load_jsonl(test_path)
-    print(f"Loaded {len(raw_train)} train, {len(raw_test)} test samples")
+
+    raw_sft, raw_grpo = None, None
+    if "sft" in phases:
+        sft_path = os.path.join(data_dir, "train_sft.jsonl")
+        assert os.path.exists(sft_path), f"train_sft.jsonl not found in {data_dir}"
+        raw_sft = load_jsonl(sft_path)
+    if "grpo" in phases:
+        grpo_path = os.path.join(data_dir, "train_grpo.jsonl")
+        assert os.path.exists(grpo_path), f"train_grpo.jsonl not found in {data_dir}"
+        raw_grpo = load_jsonl(grpo_path)
+    print(f"Loaded {len(raw_sft) if raw_sft else 0} sft, "
+          f"{len(raw_grpo) if raw_grpo else 0} grpo, {len(raw_test)} test samples")
 
     # Load model
     from unsloth import FastLanguageModel
@@ -683,7 +690,7 @@ def main():
         response_tpl = tokenizer.encode("<|im_start|>assistant\n", add_special_tokens=False)
         train_tokenized = [
             tokenize_with_labels(r, tokenizer, args.max_seq_len, response_tpl)
-            for r in raw_train
+            for r in raw_sft
         ]
         n_total = len(train_tokenized)
         # Drop samples whose response was truncated away (all labels -100) —
@@ -714,7 +721,7 @@ def main():
         print("PHASE: GRPO (constrained generation)")
         print("=" * 70)
 
-        model = run_grpo(model, tokenizer, raw_train, stacked_masks, advance_map,
+        model = run_grpo(model, tokenizer, raw_grpo, stacked_masks, advance_map,
                          state_valid, args)
 
         grpo_dir = os.path.join(output_dir, f"grpo-{args.model.lower()}")

@@ -224,7 +224,7 @@ def _call_openrouter(
 def load_test_data() -> list[dict]:
     test_path = os.path.join(DATA_DIR, "test.jsonl")
     if not os.path.exists(test_path):
-        raise FileNotFoundError(f"{test_path} not found. Run: python -m tools.export_data")
+        raise FileNotFoundError(f"{test_path} not found. Run: python -m tools.data_export.export_grpo")
     rows = []
     with open(test_path, encoding="utf-8") as f:
         for line in f:

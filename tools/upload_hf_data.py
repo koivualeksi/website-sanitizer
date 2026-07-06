@@ -15,7 +15,7 @@ from dotenv import load_dotenv
 from huggingface_hub import HfApi
 
 DATA_DIR = Path(__file__).parent.parent / "data"
-FILES = ["train.jsonl", "test.jsonl"]
+FILES = ["train_sft.jsonl", "train_grpo.jsonl", "test.jsonl"]
 
 
 def main():
