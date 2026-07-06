@@ -290,6 +290,8 @@ def run_sft(model, tokenizer, train_tokenized, stacked_masks, advance_map, args)
     global_step = 0
     accum_loss = 0.0
     t0 = time.time()
+    history = []
+    history_path = os.path.join(args.output_dir, "sft_log_history.json")
 
     for epoch in range(args.sft_epochs):
         for batch_idx, batch in enumerate(train_loader):
@@ -341,6 +343,10 @@ def run_sft(model, tokenizer, train_tokenized, stacked_masks, advance_map, args)
                     lr = scheduler.get_last_lr()[0]
                     print(f"  step {global_step}/{total_steps}  loss={avg:.4f}  lr={lr:.2e}")
                     accum_loss = 0.0
+                    # Rewritten every log step so the curve survives a crash
+                    history.append({"step": global_step, "loss": avg, "lr": lr})
+                    with open(history_path, "w") as f:
+                        json.dump(history, f)
 
                 if args.sft_max_steps > 0 and global_step >= args.sft_max_steps:
                     print(f"  Reached --sft-max-steps {args.sft_max_steps}, stopping.")
@@ -519,6 +525,11 @@ def run_grpo(model, tokenizer, raw_train, stacked_masks, advance_map, state_vali
     except Exception as e:
         print(f"(train stats unavailable: {e})")
 
+    # Full metric curves (reward, clipped_ratio, kl, ...) for offline review;
+    # uploaded to HF with the rest of output_dir
+    with open(os.path.join(args.output_dir, "grpo_log_history.json"), "w") as f:
+        json.dump(trainer.state.log_history, f)
+
     # unsloth's GRPO loss sets this process-wide on every step and never
     # resets it; left at "1" every later forward returns hidden states
     # instead of logits, breaking all generation (unsloth #1958)
@@ -603,6 +614,7 @@ def run_eval(model, tokenizer, raw_test, stacked_masks, advance_map, label, max_
         })
 
     results = []
+    n_shown = 0
     for i, page in enumerate(test_pages):
         md = page["markdown"]
         max_line = get_max_line(md)
@@ -630,23 +642,27 @@ def run_eval(model, tokenizer, raw_test, stacked_masks, advance_map, label, max_
                                     skip_special_tokens=True)
 
         pred_lines = parse_ranges(response, max_line)
-        if pred_lines is None:
-            results.append(None)
-            if i < 20:
-                print(f"  [{i+1}/{len(test_pages)}] pid={page['page_id']} "
-                      f"PARSE_ERROR: {response[:80]}")
-        else:
-            metrics = compute_metrics(pred_lines, truth_lines)
-            results.append(metrics)
+        metrics = compute_metrics(pred_lines, truth_lines) if pred_lines is not None else None
+        # Full response is kept so failures can be analyzed offline from the
+        # uploaded eval json — the console only shows a few examples
+        results.append({
+            "page_id": page["page_id"],
+            "response": response,
+            "metrics": metrics,
+        })
+        if metrics is None and n_shown < 10:
+            n_shown += 1
+            print(f"  [{i+1}/{len(test_pages)}] pid={page['page_id']} "
+                  f"PARSE_ERROR: {response[:80]}")
 
         if (i + 1) % 100 == 0:
-            ok_so_far = [r for r in results if r is not None]
+            ok_so_far = [r["metrics"] for r in results if r["metrics"] is not None]
             if ok_so_far:
                 iou = sum(r["iou"] for r in ok_so_far) / len(ok_so_far)
                 print(f"  [{i+1}/{len(test_pages)}] running IoU={iou:.3f}")
 
-    ok = [r for r in results if r is not None]
-    n_fail = sum(1 for r in results if r is None)
+    ok = [r["metrics"] for r in results if r["metrics"] is not None]
+    n_fail = sum(1 for r in results if r["metrics"] is None)
     print(f"\n{label} — {len(ok)}/{len(results)} succeeded ({n_fail} parse failures)")
     if ok:
         mi = sum(r["iou"] for r in ok) / len(ok)
