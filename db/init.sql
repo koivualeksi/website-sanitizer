@@ -19,5 +19,13 @@ CREATE TABLE IF NOT EXISTS annotations (
     skipped     BOOLEAN NOT NULL DEFAULT FALSE,
     has_cookies BOOLEAN NOT NULL DEFAULT FALSE,
     created_at  TIMESTAMPTZ DEFAULT now(),
-    updated_at  TIMESTAMPTZ DEFAULT now()
+    updated_at  TIMESTAMPTZ DEFAULT now(),
+    tier TEXT GENERATED ALWAYS AS (
+        CASE
+            WHEN skipped OR ranges = '[]'::jsonb THEN 'bronze'
+            WHEN source = 'manual' AND validated  THEN 'diamond'
+            WHEN source = 'llm'    AND validated  THEN 'gold'
+            ELSE 'silver'
+        END
+    ) STORED
 );

@@ -11,7 +11,8 @@ from dotenv import load_dotenv
 from psycopg.rows import dict_row
 
 from db.pool import create_pool
-from tools.auto_annotation.annotator import annotate_page, CALL_DELAY
+from tools.auto_annotation.annotator import annotate_page
+from tools.auto_annotation.config import CALL_DELAY
 
 
 def _fetch_ground_truth(pool) -> list[dict]:
@@ -23,10 +24,9 @@ def _fetch_ground_truth(pool) -> list[dict]:
                    FROM pages p
                    JOIN annotations a ON a.page_id = p.id
                    WHERE p.status = %s
-                     AND a.validated = %s
-                     AND a.source = %s
+                     AND a.tier = %s
                    ORDER BY p.id""",
-                ("success", True, "manual"),
+                ("success", "diamond"),
             )
             return cur.fetchall()
 

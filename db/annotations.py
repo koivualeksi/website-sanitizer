@@ -4,7 +4,7 @@ import json
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
-SORTABLE_COLUMNS = {"id", "url", "source", "validated"}
+SORTABLE_COLUMNS = {"id", "url", "source", "validated", "tier"}
 SORT_DIRECTIONS = {"asc", "desc"}
 
 
@@ -50,10 +50,11 @@ def _list_pages_sync(
         "url": "p.url",
         "source": "a.source",
         "validated": "a.validated",
+        "tier": "CASE a.tier WHEN 'diamond' THEN 3 WHEN 'gold' THEN 2 WHEN 'silver' THEN 1 ELSE 0 END",
     }
     order_col = col_map[sort_col]
     # Nulls last for annotation columns so unannotated pages sort to end
-    nulls = " NULLS LAST" if sort_col in ("source", "validated") else ""
+    nulls = " NULLS LAST" if sort_col in ("source", "validated", "tier") else ""
     # Urgent pages always first
     order_clause = f"ORDER BY p.urgent DESC, {order_col} {sort_dir}{nulls}"
 
@@ -70,7 +71,7 @@ def _list_pages_sync(
             cur.execute(
                 f"""
                 SELECT p.id, p.url, p.status, p.urgent,
-                       a.ranges, a.source, a.validated, a.skipped
+                       a.ranges, a.source, a.validated, a.skipped, a.tier
                 FROM pages p
                 LEFT JOIN annotations a ON a.page_id = p.id
                 WHERE {where}
@@ -91,7 +92,8 @@ def _get_annotation_sync(pool: ConnectionPool, page_id: int) -> dict | None:
                 """
                 SELECT p.id, p.url, p.html, p.markdown,
                        a.ranges, a.source, a.validated, a.skipped,
-                       COALESCE(a.has_cookies, FALSE) AS has_cookies
+                       COALESCE(a.has_cookies, FALSE) AS has_cookies,
+                       a.tier
                 FROM pages p
                 LEFT JOIN annotations a ON a.page_id = p.id
                 WHERE p.id = %s AND p.status = 'success'
@@ -129,7 +131,7 @@ def _accept_annotation_sync(pool: ConnectionPool, page_id: int) -> None:
         conn.execute(
             """
             UPDATE annotations
-            SET validated = TRUE, skipped = FALSE, updated_at = now()
+            SET validated = TRUE, skipped = FALSE, source = 'manual', updated_at = now()
             WHERE page_id = %s
             """,
             (page_id,),

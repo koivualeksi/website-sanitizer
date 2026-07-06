@@ -147,6 +147,7 @@ tbody td {
 .col-annotation { width: 150px; min-width: 100px; }
 .col-source { width: 90px; min-width: 70px; }
 .col-valid { width: 70px; min-width: 60px; }
+.col-tier { width: 90px; min-width: 70px; }
 
 .cell-url {
     max-width: 0;
@@ -187,6 +188,10 @@ tbody td {
 }
 .badge-llm { background: var(--bg-range-amber); color: var(--text-range-amber); }
 .badge-manual { background: var(--bg-range-green); color: var(--text-range-green); }
+.badge-bronze  { background: #d1d5db; color: #374151; }
+.badge-silver  { background: #e5e7eb; color: #1f2937; }
+.badge-gold    { background: #fef3c7; color: #92400e; }
+.badge-diamond { background: #dbeafe; color: #1e40af; }
 .urgent-flag { color: #f59e0b; font-size: 1.1em; }
 .col-urgent { width: 28px; padding: 0 4px; text-align: center; }
 

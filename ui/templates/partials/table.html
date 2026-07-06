@@ -64,6 +64,14 @@
                     Valid {% if sort == 'validated' %}{{ '▲' if dir == 'asc' else '▼' }}{% endif %}
                     <span class="resize-handle"></span>
                 </th>
+
+                {% set new_dir = 'desc' if sort == 'tier' and dir == 'asc' else 'asc' %}
+                <th class="col-tier resizable"
+                    hx-get="/pages?tab={{ tab }}&sort=tier&dir={{ new_dir }}&search={{ search|urlencode }}&page=1"
+                    hx-target="#table-area" hx-swap="innerHTML">
+                    Tier {% if sort == 'tier' %}{{ '▲' if dir == 'asc' else '▼' }}{% endif %}
+                    <span class="resize-handle"></span>
+                </th>
             </tr>
         </thead>
         <tbody>
@@ -107,9 +115,16 @@
                         --
                     {% endif %}
                 </td>
+                <td>
+                    {% if row.tier %}
+                        <span class="badge badge-{{ row.tier }}">{{ row.tier | capitalize }}</span>
+                    {% else %}
+                        --
+                    {% endif %}
+                </td>
             </tr>
             {% else %}
-            <tr><td colspan="7" class="empty-row">No pages found.</td></tr>
+            <tr><td colspan="8" class="empty-row">No pages found.</td></tr>
             {% endfor %}
         </tbody>
     </table>

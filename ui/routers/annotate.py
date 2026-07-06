@@ -66,6 +66,7 @@ async def get_modal(request: Request, page_id: int):
             "skipped": data["skipped"] or False,
             "has_html": bool(data["html"]),
             "has_cookies": data["has_cookies"],
+            "tier": data["tier"] or "bronze",
         },
     )
 
@@ -152,7 +153,7 @@ async def save(request: Request, page_id: int, body: AnnotationBody):
         raise HTTPException(status_code=404, detail="Page not found")
 
     ranges = [{"start": r.start, "end": r.end} for r in body.ranges]
-    await db_ann.save_annotation(pool, page_id, ranges, body.source)
+    await db_ann.save_annotation(pool, page_id, ranges, "manual")
     return HTMLResponse("ok", status_code=200)
 
 

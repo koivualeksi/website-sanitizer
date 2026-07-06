@@ -577,7 +577,16 @@ COLUMNS = [
 ]
 
 
-def _fetch_annotated(pool) -> list[dict]:
+TIER_ORDER = {"bronze": 0, "silver": 1, "gold": 2, "diamond": 3}
+
+
+def _tiers_at_or_above(min_tier: str) -> list[str]:
+    threshold = TIER_ORDER[min_tier]
+    return [t for t, v in TIER_ORDER.items() if v >= threshold]
+
+
+def _fetch_annotated(pool, min_tier: str = "silver") -> list[dict]:
+    tiers = _tiers_at_or_above(min_tier)
     with pool.connection() as conn:
         with conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
@@ -586,10 +595,10 @@ def _fetch_annotated(pool) -> list[dict]:
                    FROM pages p
                    JOIN annotations a ON a.page_id = p.id
                    WHERE p.status = %s
-                     AND a.validated = %s
+                     AND a.tier = ANY(%s)
                      AND COALESCE(p.dataset, 'original') = 'original'
                    ORDER BY p.id""",
-                ("success", True),
+                ("success", tiers),
             )
             return cur.fetchall()
 
@@ -668,17 +677,19 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--all", action="store_true",
                         help="Export all pages to single features.csv")
+    parser.add_argument("--min-tier", choices=["silver", "gold", "diamond"],
+                        default="silver", help="Minimum tier to include (default: silver)")
     args = parser.parse_args()
 
     load_dotenv()
     pool = create_pool()
 
     try:
-        pages = _fetch_annotated(pool)
+        pages = _fetch_annotated(pool, args.min_tier)
     finally:
         pool.close()
 
-    print(f"Found {len(pages)} annotated pages")
+    print(f"Found {len(pages)} annotated pages (min tier: {args.min_tier})")
 
     if args.all:
         _export_all(pages)

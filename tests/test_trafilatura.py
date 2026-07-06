@@ -28,10 +28,9 @@ def _fetch_ground_truth(pool) -> list[dict]:
                    FROM pages p
                    JOIN annotations a ON a.page_id = p.id
                    WHERE p.status = %s
-                     AND a.validated = %s
-                     AND a.source = %s
+                     AND a.tier = %s
                    ORDER BY p.id""",
-                ("success", True, "manual"),
+                ("success", "diamond"),
             )
             return cur.fetchall()
 

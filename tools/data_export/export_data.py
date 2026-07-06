@@ -24,20 +24,27 @@ from scraper.converter import html_to_markdown_light
 SEED = 42
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
 SYSTEM_PROMPT = "Return content line ranges as start:end pairs."
+TIER_ORDER = {"bronze": 0, "silver": 1, "gold": 2, "diamond": 3}
 
 
-def _fetch_annotated(pool) -> list[dict]:
+def _tiers_at_or_above(min_tier: str) -> list[str]:
+    threshold = TIER_ORDER[min_tier]
+    return [t for t, v in TIER_ORDER.items() if v >= threshold]
+
+
+def _fetch_annotated(pool, min_tier: str = "silver") -> list[dict]:
+    tiers = _tiers_at_or_above(min_tier)
     with pool.connection() as conn:
         with conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
-                """SELECT p.id, p.url, p.html, p.markdown, a.ranges
+                """SELECT p.id, p.url, p.html, p.markdown, a.ranges, a.tier
                    FROM pages p
                    JOIN annotations a ON a.page_id = p.id
                    WHERE p.status = %s
-                     AND a.validated = %s
+                     AND a.tier = ANY(%s)
                      AND COALESCE(p.dataset, 'original') = 'original'
                    ORDER BY p.id""",
-                ("success", True),
+                ("success", tiers),
             )
             return cur.fetchall()
 
@@ -62,6 +69,7 @@ def _to_chat_row(page: dict) -> dict:
         ],
         "page_id": page["id"],
         "url": page["url"],
+        "tier": page.get("tier", "silver"),
     }
 
 
@@ -74,15 +82,21 @@ def _write_split(path, pages, indices):
 
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--min-tier", choices=["silver", "gold", "diamond"],
+                        default="silver", help="Minimum tier to include (default: silver)")
+    args = parser.parse_args()
+
     load_dotenv()
     pool = create_pool()
 
     try:
-        pages = _fetch_annotated(pool)
+        pages = _fetch_annotated(pool, args.min_tier)
     finally:
         pool.close()
 
-    print(f"Found {len(pages)} annotated pages")
+    print(f"Found {len(pages)} annotated pages (min tier: {args.min_tier})")
 
     manifest_path = os.path.join(OUTPUT_DIR, "split_manifest.json")
     if os.path.exists(manifest_path):

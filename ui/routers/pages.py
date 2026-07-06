@@ -41,7 +41,7 @@ async def pages_partial(
     request: Request,
     tab: Literal["unvalidated", "validated", "all"] = "unvalidated",
     page: int = Query(default=1, ge=1, le=10000),
-    sort: Literal["id", "url", "source", "validated"] = "id",
+    sort: Literal["id", "url", "source", "validated", "tier"] = "id",
     dir: Literal["asc", "desc"] = "asc",
     search: str = Query(default="", max_length=500),
 ):
