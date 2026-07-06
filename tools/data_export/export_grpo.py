@@ -1,12 +1,12 @@
-"""Export annotated pages as train/test JSONL.
+"""Export gold+diamond annotations as train/test JSONL for GRPO.
 
 Each row is a chat completion example:
-  {"messages": [system, user, assistant], "page_id": ..., "url": ...}
+  {"messages": [system, user, assistant], "page_id": ..., "url": ..., "tier": ...}
 
 Uses a fixed split manifest for reproducibility. Generates a fresh
 80/20 split if no manifest exists.
 
-Run: python -m tools.export_data
+Run: python -m tools.data_export.export_grpo
 """
 
 import json
@@ -22,18 +22,12 @@ from scraper.converter import html_to_markdown_light
 
 
 SEED = 42
-OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
+OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "data")
 SYSTEM_PROMPT = "Return content line ranges as start:end pairs."
-TIER_ORDER = {"bronze": 0, "silver": 1, "gold": 2, "diamond": 3}
+TIERS = ["gold", "diamond"]
 
 
-def _tiers_at_or_above(min_tier: str) -> list[str]:
-    threshold = TIER_ORDER[min_tier]
-    return [t for t, v in TIER_ORDER.items() if v >= threshold]
-
-
-def _fetch_annotated(pool, min_tier: str = "silver") -> list[dict]:
-    tiers = _tiers_at_or_above(min_tier)
+def _fetch_annotated(pool) -> list[dict]:
     with pool.connection() as conn:
         with conn.cursor(row_factory=dict_row) as cur:
             cur.execute(
@@ -44,15 +38,14 @@ def _fetch_annotated(pool, min_tier: str = "silver") -> list[dict]:
                      AND a.tier = ANY(%s)
                      AND COALESCE(p.dataset, 'original') = 'original'
                    ORDER BY p.id""",
-                ("success", tiers),
+                ("success", TIERS),
             )
             return cur.fetchall()
 
 
 def _ranges_to_compact(ranges: list[dict]) -> str:
-    """Convert [{"start":10,"end":20},...] to '10:20,...' format."""
     if not ranges:
-        return "1:1"  # fallback for empty ranges
+        return "1:1"
     parts = [f"{r['start']}:{r['end']}" for r in ranges]
     return ",".join(parts)
 
@@ -69,7 +62,7 @@ def _to_chat_row(page: dict) -> dict:
         ],
         "page_id": page["id"],
         "url": page["url"],
-        "tier": page.get("tier", "silver"),
+        "tier": page.get("tier", "gold"),
     }
 
 
@@ -82,21 +75,15 @@ def _write_split(path, pages, indices):
 
 
 def main():
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--min-tier", choices=["silver", "gold", "diamond"],
-                        default="silver", help="Minimum tier to include (default: silver)")
-    args = parser.parse_args()
-
     load_dotenv()
     pool = create_pool()
 
     try:
-        pages = _fetch_annotated(pool, args.min_tier)
+        pages = _fetch_annotated(pool)
     finally:
         pool.close()
 
-    print(f"Found {len(pages)} annotated pages (min tier: {args.min_tier})")
+    print(f"Found {len(pages)} gold+diamond pages")
 
     manifest_path = os.path.join(OUTPUT_DIR, "split_manifest.json")
     if os.path.exists(manifest_path):
@@ -118,7 +105,7 @@ def main():
     print(f"Train: {len(train_idx)}, Test: {len(test_idx)}")
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
-    _write_split(os.path.join(OUTPUT_DIR, "train.jsonl"), pages, train_idx)
+    _write_split(os.path.join(OUTPUT_DIR, "train_grpo.jsonl"), pages, train_idx)
     _write_split(os.path.join(OUTPUT_DIR, "test.jsonl"), pages, test_idx)
 
     manifest = {
