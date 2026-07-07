@@ -49,6 +49,10 @@ def parse_args():
     p.add_argument("--sft-lr", type=float, default=2e-4)
     p.add_argument("--sft-batch", type=int, default=1)
     p.add_argument("--sft-grad-accum", type=int, default=8)
+    p.add_argument("--sft-data-file", default="train_sft.jsonl",
+                   help="JSONL file for SFT training (default: train_sft.jsonl)")
+    p.add_argument("--grpo-data-file", default="train_grpo.jsonl",
+                   help="JSONL file for GRPO training (default: train_grpo.jsonl)")
     p.add_argument("--grpo-max-steps", type=int, default=0,
                    help="Stop GRPO after N optimizer steps (0 = full run); for smoke tests")
     p.add_argument("--grpo-epochs", type=int, default=1)
@@ -701,12 +705,12 @@ def main():
 
     raw_sft, raw_grpo = None, None
     if "sft" in phases:
-        sft_path = os.path.join(data_dir, "train_sft.jsonl")
-        assert os.path.exists(sft_path), f"train_sft.jsonl not found in {data_dir}"
+        sft_path = os.path.join(data_dir, args.sft_data_file)
+        assert os.path.exists(sft_path), f"{args.sft_data_file} not found in {data_dir}"
         raw_sft = load_jsonl(sft_path)
     if "grpo" in phases:
-        grpo_path = os.path.join(data_dir, "train_grpo.jsonl")
-        assert os.path.exists(grpo_path), f"train_grpo.jsonl not found in {data_dir}"
+        grpo_path = os.path.join(data_dir, args.grpo_data_file)
+        assert os.path.exists(grpo_path), f"{args.grpo_data_file} not found in {data_dir}"
         raw_grpo = load_jsonl(grpo_path)
     print(f"Loaded {len(raw_sft) if raw_sft else 0} sft, "
           f"{len(raw_grpo) if raw_grpo else 0} grpo, {len(raw_test)} test samples")

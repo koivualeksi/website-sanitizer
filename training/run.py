@@ -40,10 +40,12 @@ def build_train_args(env):
     ]
 
     optional = [
+        ("SFT_DATA_FILE", "--sft-data-file"),
         ("SFT_EPOCHS", "--sft-epochs"),
         ("SFT_LR", "--sft-lr"),
         ("SFT_BATCH", "--sft-batch"),
         ("SFT_GRAD_ACCUM", "--sft-grad-accum"),
+        ("GRPO_DATA_FILE", "--grpo-data-file"),
         ("GRPO_MAX_STEPS", "--grpo-max-steps"),
         ("GRPO_EPOCHS", "--grpo-epochs"),
         ("GRPO_LR", "--grpo-lr"),

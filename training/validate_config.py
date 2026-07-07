@@ -17,7 +17,8 @@ KNOWN_KEYS = {
     "run_name", "model", "phases", "max_seq_len", "sft_max_steps",
     "gpu_type", "max_runtime", "hf_dataset_revision",
     # optional overrides
-    "sft_epochs", "sft_lr", "sft_batch", "sft_grad_accum",
+    "sft_data_file", "sft_epochs", "sft_lr", "sft_batch", "sft_grad_accum",
+    "grpo_data_file",
     "grpo_epochs", "grpo_lr", "grpo_num_generations",
     "grpo_max_completion", "grpo_beta", "grpo_temperature",
     "reward_beta", "lora_r",

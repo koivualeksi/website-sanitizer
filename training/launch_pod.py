@@ -108,8 +108,8 @@ def main():
 
     # Forward optional override keys from config
     optional_keys = [
-        "sft_epochs", "sft_lr", "sft_batch", "sft_grad_accum",
-        "grpo_max_steps", "grpo_epochs", "grpo_lr", "grpo_num_generations",
+        "sft_data_file", "sft_epochs", "sft_lr", "sft_batch", "sft_grad_accum",
+        "grpo_data_file", "grpo_max_steps", "grpo_epochs", "grpo_lr", "grpo_num_generations",
         "grpo_max_completion", "grpo_beta", "grpo_temperature",
         "reward_beta", "lora_r",
     ]
