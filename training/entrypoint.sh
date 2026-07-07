@@ -53,11 +53,8 @@ git remote add origin "$REPO_URL"
 git fetch --depth 1 origin "$GITHUB_SHA"
 git checkout FETCH_HEAD
 
-# Dependencies are baked into the image (training/Dockerfile); fail fast if
-# the pod was launched with a stale/wrong image instead of reinstalling
-python -c "import unsloth, trl, slack_sdk" || {
-    echo "ERROR: baked dependencies missing — was the pod launched with the GHCR image?"
-    exit 1
-}
+# Install dependencies — base RunPod image has torch/CUDA but not unsloth/trl
+pip install --no-cache-dir uv
+uv pip install --system --no-cache -r training/requirements.txt
 
 timeout "$MAX_RUNTIME" python -m training.run

@@ -18,16 +18,12 @@ from training.notify import send as notify_slack
 RUNPOD_API = "https://rest.runpod.io/v1/pods"
 
 
+RUNPOD_BASE_IMAGE = "runpod/pytorch:1.0.7-cu1281-torch280-ubuntu2204"
+
+
 def image_name():
-    """GHCR image baked by build-image.yml; TRAIN_IMAGE overrides for testing."""
-    override = os.environ.get("TRAIN_IMAGE")
-    if override:
-        return override
-    gh_repo = os.environ.get("GITHUB_REPOSITORY", "")
-    if not gh_repo:
-        print("GITHUB_REPOSITORY or TRAIN_IMAGE must be set to resolve the image")
-        sys.exit(1)
-    return f"ghcr.io/{gh_repo.lower()}/train:latest"
+    """RunPod base image (cached on their nodes). TRAIN_IMAGE overrides for testing."""
+    return os.environ.get("TRAIN_IMAGE", RUNPOD_BASE_IMAGE)
 
 
 def load_config():
