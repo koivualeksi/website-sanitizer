@@ -125,7 +125,7 @@ def main():
         "gpuCount": 1,
         "allowedCudaVersions": ["12.8"],
         "volumeInGb": 50,
-        "containerDiskInGb": 20,
+        "containerDiskInGb": 40,
         "env": env_vars,
         "dockerStartCmd": ["/bin/bash", "-c", "echo \"$ENTRYPOINT_SCRIPT\" | base64 -d | /bin/bash"],
     }
