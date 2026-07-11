@@ -1,9 +1,9 @@
-run_name: "qwen-1.5b-sft"
+run_name: "qwen-1.5b-sft-grpo"
 model: "1.5B"              # 0.5B | 1.5B | 3B
-phases: "sft"              # sft | sft,grpo
+phases: "sft,grpo"         # sft | sft,grpo
 max_seq_len: 8192
 sft_max_steps: 0           # 0 = full run; 5 = smoke test
-sft_data_file: "train_grpo.jsonl"  # gold+diamond data for SFT
+sft_data_file: "train.jsonl"  # full SFT data
 grpo_beta: 0.0             # KL leash off: TRL+PEFT ref = base (not SFT) so it pulls towards incorrect formatting
 gpu_type: "NVIDIA GeForce RTX 4090"
 max_runtime: "6h"          # watchdog; pod killed after this
